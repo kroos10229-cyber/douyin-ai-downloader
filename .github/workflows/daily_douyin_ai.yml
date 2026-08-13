@@ -1,0 +1,44 @@
+name: 抖音 AI 热门视频每日定时下载
+
+on:
+  schedule:
+    # 每天北京时间早上 08:00 (UTC 00:00) 线上自动触发执行
+    - cron: '0 0 * * *'
+  # 支持在 GitHub 网页上手动随时触发运行
+  workflow_dispatch:
+
+jobs:
+  crawl-and-download:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: 检出仓库代码
+        uses: actions/checkout@v4
+
+      - name: 设置 Python 环境
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: 安装 Python 依赖项
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+
+      - name: 安装 Playwright 无头浏览器
+        run: |
+          npx playwright install chromium --with-deps
+
+      - name: 执行抖音 AI 热门视频抓取与下载
+        env:
+          NOTIFY_WEBHOOK: ${{ secrets.NOTIFY_WEBHOOK }}
+        run: |
+          python douyin_ai_crawler.py
+
+      - name: 打包上传每日视频与统计报告 (供在线下载)
+        uses: actions/upload-artifact@v4
+        with:
+          name: douyin-ai-videos-${{ github.run_id }}
+          path: |
+            downloads/
+          retention-days: 7
