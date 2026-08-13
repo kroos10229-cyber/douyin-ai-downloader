@@ -18,8 +18,8 @@ KEYWORDS = [
 # 过滤与去重规则
 MIN_LIKES = 3000          # 优先筛选点赞 3000 以上的高热度抖音视频
 MAX_AGE_DAYS = 30         # 严格限定发布时间：只抓取近 30 天内发布的新视频
-TARGET_MIN_VIDEOS = 10     # 每日推送下限 (10-20个)
-TARGET_MAX_VIDEOS = 20     # 每日推送上限
+TARGET_MIN_VIDEOS = 10     # 每日推送精确为 10 个精选爆款
+TARGET_MAX_VIDEOS = 10
 
 # 目录与历史去重库
 BASE_DIR = os.path.dirname(__file__)
@@ -92,74 +92,67 @@ def download_video(video_url, output_path):
     return False
 
 
-# ==================== 4. Google Gemini 3.6 Flash / DeepSeek 大模型深度拆解引擎 ====================
+# ==================== 4. 精炼干练版 AI 拆解引擎 ====================
 
 def generate_ai_analysis(title, author, likes, collects, comments):
     """
-    针对抖音 AI 热门视频，调用 Google Gemini 3.6 Flash 进行实时大模型深度 4 维拆解
+    精炼、清晰、绝无占位符的 4 维干货拆解
     """
-    prompt = f"""你是一名抖音短视频爆款拆解专家。请对以下【抖音】AI热门视频进行深度拆解分析：
-标题：{title}
-创作者：{author}
-数据：点赞 {likes}，收藏 {collects}，评论 {comments}
-
-请严格按以下 4 个部分输出，内容要充实丰满、深入浅出，具有极强指导意义：
-
-【视频内容】：总结视频的核心主题、演示的 AI 工具/玩法与价值（80-120字）。
-【值得借鉴的点】：分析视频在选题切入、前3秒吸睛、视觉呈现或文案上的亮点（80-120字）。
-【热门原因拆解】：从心理学与算法逻辑拆解为何能爆（如触达痛点、完播率拉升或高收藏价值）（80-120字）。
-【如何借鉴复制】：给出具体的对标复刻 SOP 步骤（1. 选题切入点 2. 前3秒文案脚本 3. 画面呈现方案 4. 评论区转化引流钩子）（100-150字）。"""
+    time.sleep(1.5)  # 控频防 API 429 限制
 
     if GEMINI_API_KEY:
         try:
+            prompt = f"""你是一名抖音短视频爆款拆解专家。请对以下【抖音】AI热门视频进行极其精炼干练的 4 维度拆解（每项必须直接输出 1-2 句精辟内容，绝对禁止输出空标签或占位符）：
+
+标题：{title}
+创作者：{author}
+数据：点赞 {likes}，收藏 {collects}
+
+输出格式要求（严格按以下格式，冒号后直接跟着精炼分析内容）：
+📌 视频内容：[1-2句精炼总结核心玩法/工具/主题]
+💡 值得借鉴的点：[1-2句总结最亮眼吸睛的切入点/视觉/文案]
+🔥 热门原因拆解：[1-2句总结痛点共鸣/完播率/算法触发逻辑]
+🚀 如何借鉴复制：[1-2句具体的对标复刻步骤SOP]"""
+
             url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-3.6-flash:generateContent?key={GEMINI_API_KEY}"
             headers = {"Content-Type": "application/json"}
             payload = {"contents": [{"parts": [{"text": prompt}]}]}
-            resp = requests.post(url, headers=headers, json=payload, timeout=12)
+            resp = requests.post(url, headers=headers, json=payload, timeout=10)
             if resp.status_code == 200:
-                data = resp.json()
-                content = data["candidates"][0]["content"]["parts"][0]["text"]
-                print(f"[✔] 成功调用 Google Gemini 3.6 Flash 大模型生成实时深度拆解！")
-                return parse_llm_response(content)
-            else:
-                print(f"[!] Gemini API 返回状态码 {resp.status_code}")
+                text = resp.json()["candidates"][0]["content"]["parts"][0]["text"].strip()
+                res = parse_llm_text_clean(text)
+                if res["summary"] and "【" not in res["summary"]:
+                    print(f"[✔] 成功调用 Gemini 3.6 Flash 生成精炼拆解")
+                    return res
         except Exception as e:
-            print(f"[!] 调用 Gemini API 发生异常: {e}")
+            print(f"[!] 调用 Gemini API 异常: {e}")
 
-    if DEEPSEEK_API_KEY:
-        try:
-            resp = requests.post(
-                "https://api.deepseek.com/chat/completions",
-                headers={"Authorization": f"Bearer {DEEPSEEK_API_KEY}", "Content-Type": "application/json"},
-                json={"model": "deepseek-chat", "messages": [{"role": "user", "content": prompt}], "temperature": 0.7},
-                timeout=12
-            )
-            if resp.status_code == 200:
-                content = resp.json()["choices"][0]["message"]["content"]
-                return parse_llm_response(content)
-        except Exception as e:
-            print(f"[!] 调用 DeepSeek API 发生异常: {e}")
+    return heuristic_clean_analysis(title, author, likes, collects, comments)
 
-    return heuristic_rich_analysis(title, author, likes, collects, comments)
+def parse_llm_text_clean(text):
+    """解析大模型文本，确保提取出真实的精炼文字"""
+    summary, takeaway, viral_reason, replication = "", "", "", ""
+    for line in text.split("\n"):
+        line_s = line.strip()
+        if "📌 视频内容" in line_s or "视频内容" in line_s:
+            summary = line_s.split("：")[-1].strip() if "：" in line_s else line_s
+        elif "💡 值得借鉴的点" in line_s or "值得借鉴" in line_s:
+            takeaway = line_s.split("：")[-1].strip() if "：" in line_s else line_s
+        elif "🔥 热门原因拆解" in line_s or "热门原因" in line_s:
+            viral_reason = line_s.split("：")[-1].strip() if "：" in line_s else line_s
+        elif "🚀 如何借鉴复制" in line_s or "借鉴复制" in line_s:
+            replication = line_s.split("：")[-1].strip() if "：" in line_s else line_s
 
-def heuristic_rich_analysis(title, author, likes, collects, comments):
-    """内置丰满、深度的 4 层次拆解规则引擎 (兜底)"""
-    tool_name = "AI大模型"
-    for k in ["DeepSeek", "ChatGPT", "Claude", "千问", "Kimi", "GLM", "Gemini", "Grok", "Sora", "即梦", "Midjourney"]:
-        if k.lower() in title.lower():
-            tool_name = k
-            break
+    # 清理遗留的括号标记
+    summary = summary.replace("【视频内容】", "").strip()
+    takeaway = takeaway.replace("【值得借鉴的点】", "").strip()
+    viral_reason = viral_reason.replace("【热门原因拆解】", "").strip()
+    replication = replication.replace("【如何借鉴复制】", "").strip()
 
-    if "agent" in title.lower() or "智能体" in title:
-        summary = f"视频深入讲解了基于 {tool_name} 打造 AI Agent (智能体) 的全流程。演示了从零搭建、多智能体协同分工，到自动执行复杂业务逻辑的惊艳效果。"
-        takeaway = f"1. 选题抓住了‘AI从对话走向自动干活’的大趋势；2. 演示过程逻辑清晰，用直观的任务跑通录屏建立极高信任度；3. 强调‘无需编程基础’，降低学习门槛。"
-        viral_reason = f"1. **痛点触达**：击中了降本增效、减少重复劳动的强烈刚需；2. **爽点释放**：自动化执行带来极强心理满足感；3. **高收藏率**：具有极高方法论价值。"
-        replication = f"**1. 选题切入**：对标‘用AI Agent帮我打工’主题；**2. 脚本结构**：前3秒出示Agent成果 -> 痛点引导 -> 3步搭建教学；**3. 画面呈现**：录屏+高清放大关键步骤；**4. 转化钩子**：评论区置顶‘领同款Agent配置文件’。"
-    else:
-        summary = f"视频针对 {tool_name} 提供了系统化、保姆级的实操教学。涵盖了从基础注册、高阶 Prompt 提示词编写技巧，到结合实际工作场景的落地指南。"
-        takeaway = f"1. 结构化极强，采用‘问题-方案-结果’主线；2. 提示词可以直接拿来即用；3. 语言通俗易懂，普通观众也能轻松听懂。"
-        viral_reason = f"1. **利他属性极强**：干货满满极易引发观众转发或收藏；2. **降低焦虑**：帮观众破除了对新科技的恐慌感；3. **算法偏好**：高完播率与高收藏量触发二次推荐。"
-        replication = f"**1. 选题切入**：找准特定群体的 {tool_name} 用法；**2. 脚本结构**：‘别再用老方法了！教你用 {tool_name} 搞定’ -> 分步骤拆解 -> 提示词展示；**3. 画面呈现**：高清实操画面；**4. 转化钩子**：‘提示词保姆级文档在评论区领’。"
+    if not summary: summary = "精炼拆解该 AI 视频的核心实操玩法与使用场景。"
+    if not takeaway: takeaway = "前3秒视觉卡点吸睛，选题直击观众效率降本痛点。"
+    if not viral_reason: viral_reason = "高实用价值引发大量收藏，高完播率触发流量池二次推荐。"
+    if not replication: replication = "对标文案结构：前3秒展示AI成果 -> 3步步骤演示 -> 评论区领资源。"
 
     return {
         "summary": summary,
@@ -168,23 +161,39 @@ def heuristic_rich_analysis(title, author, likes, collects, comments):
         "replication": replication
     }
 
-def parse_llm_response(text):
-    summary, takeaway, viral_reason, replication = "详细解析视频核心主题。", "选题直击痛点，爆款效果显著。", "高完播率与高收藏触发算法推荐。", "建议对标文案与视觉二次创作。"
-    lines = text.split("\n")
-    for line in lines:
-        if "视频内容" in line: summary = line.split("：")[-1].strip() if "：" in line else line
-        elif "值得借鉴" in line: takeaway = line.split("：")[-1].strip() if "：" in line else line
-        elif "热门原因" in line: viral_reason = line.split("：")[-1].strip() if "：" in line else line
-        elif "如何借鉴" in line or "复制" in line: replication = line.split("：")[-1].strip() if "：" in line else line
-    return {"summary": summary, "takeaway": takeaway, "viral_reason": viral_reason, "replication": replication}
+def heuristic_clean_analysis(title, author, likes, collects, comments):
+    """内置精炼干练拆解规则"""
+    tool_name = "AI大模型"
+    for k in ["DeepSeek", "ChatGPT", "Claude", "千问", "Kimi", "GLM", "Gemini", "Grok", "Sora", "即梦"]:
+        if k.lower() in title.lower():
+            tool_name = k
+            break
+
+    if "agent" in title.lower() or "智能体" in title:
+        summary = f"演示用 {tool_name} 零代码搭建 AI Agent 并自动跑通业务全流程。"
+        takeaway = "抓住了‘AI从对话走向自动干活’的大趋势，直观录屏极具信任感。"
+        viral_reason = "触达职场人降本增效刚需，自动化成果带来极强心理爽点。"
+        replication = "前3秒展示 Agent 自动打工结果 -> 3步搭建教学 -> 评论区领配置文件。"
+    else:
+        summary = f"讲解 {tool_name} 的保姆级实操教程与高阶提示词用法。"
+        takeaway = "结构清晰，提示词拿来即用，极低门槛吸引普通观众。"
+        viral_reason = "利他属性强引爆大量收藏，高完播率触发算法二次推荐。"
+        replication = "‘别再用老方法了！教你用 {tool_name} 搞定’ -> 演示步骤 -> 评论区领文档。"
+
+    return {
+        "summary": summary,
+        "takeaway": takeaway,
+        "viral_reason": viral_reason,
+        "replication": replication
+    }
 
 
 # ==================== 5. 抖音 (Douyin) 搜索与过滤核心 ====================
 
 def fetch_douyin_ai_videos():
-    """检索并筛选 30 天内发布、点赞 >= 3000 且历史未推送过的抖音 AI 视频"""
+    """检索并筛选 30 天内发布、点赞 >= 3000 且历史未推送过的 10 个抖音 AI 视频"""
     print("==========================================")
-    print("🎯 开始抓取 抖音 (Douyin) 最新 AI 热门视频...")
+    print("🎯 开始抓取 抖音 (Douyin) 最新 10 个 AI 热门视频...")
     print("==========================================")
 
     history_set = load_history_ids()
@@ -311,7 +320,7 @@ def fetch_douyin_ai_videos():
     return final_videos
 
 
-# ==================== 6. 报告导出与微信分批/分块安全推送 ====================
+# ==================== 6. 报告导出与微信精炼单条推送 ====================
 
 def save_reports(today_dir, videos, date_str):
     """保存本地 Markdown 报告与 JSON 数据"""
@@ -321,95 +330,75 @@ def save_reports(today_dir, videos, date_str):
 
     md_path = os.path.join(today_dir, "daily_report.md")
     with open(md_path, "w", encoding="utf-8") as f:
-        f.write(f"# 🤖 抖音 AI 爆款 Gemini 3.6 Flash 深度拆解日报 ({date_str})\n\n")
-        f.write(f"> 精选近 30 天内最新发出的 {len(videos)} 个头部爆款 AI 视频 | Google Gemini 3.6 Flash 实时 AI 剖析\n\n")
+        f.write(f"# 🎵 抖音 AI 爆款精炼拆解日报 ({date_str})\n\n")
+        f.write(f"> 精选近 30 天最新 10 个头部爆款 AI 视频 | 干货精炼版\n\n")
         
         for idx, v in enumerate(videos, 1):
             ana = v.get("analysis", {})
             f.write(f"## {idx}. {v['title']}\n\n")
-            f.write(f"👤 **账号信息**: {v['author']} &nbsp;|&nbsp; 📅 **发布时间**: {v['pub_date']} &nbsp;|&nbsp; ❤️ **点赞**: {format_number(v['likes'])} &nbsp;|&nbsp; ⭐ **收藏**: {format_number(v['collects'])} &nbsp;|&nbsp; 💬 **评论**: {format_number(v['comments'])}\n\n")
+            f.write(f"👤 **账号信息**: {v['author']} &nbsp;|&nbsp; 📅 {v['pub_date']} &nbsp;|&nbsp; ❤️ 点赞 {format_number(v['likes'])} &nbsp;|&nbsp; ⭐ 收藏 {format_number(v['collects'])}\n\n")
             f.write(f"🔗 **原视频链接**: [{v['share_url']}]({v['share_url']})\n\n")
-            f.write(f"📌 **视频讲的啥**:\n{ana.get('summary')}\n\n")
-            f.write(f"💡 **值得借鉴的点**:\n{ana.get('takeaway')}\n\n")
-            f.write(f"🔥 **热门原因拆解**:\n{ana.get('viral_reason')}\n\n")
-            f.write(f"🚀 **如何借鉴复制**:\n{ana.get('replication')}\n\n")
+            f.write(f"📌 **视频内容**: {ana.get('summary')}\n\n")
+            f.write(f"💡 **值得借鉴的点**: {ana.get('takeaway')}\n\n")
+            f.write(f"🔥 **热门原因拆解**: {ana.get('viral_reason')}\n\n")
+            f.write(f"🚀 **如何借鉴复制**: {ana.get('replication')}\n\n")
             f.write("---\n\n")
 
-def push_single_message(title, content):
-    """单条消息发送处理"""
+def send_mobile_notifications(videos, date_str):
+    """发送精炼干练、单条全收齐的微信推送报告"""
+    print("\n[+] 正在将 10 个精炼拆解视频推送到手机微信...")
+
+    title = f"🎵 抖音 AI 热门爆款拆解 ({date_str})"
+    
+    content_blocks = [
+        f"# 🎵 抖音 AI 热门爆款拆解 ({date_str})\n",
+        f"今日精选 **{len(videos)} 个全新抖音 AI 爆款**（限定 30 天内最新发布）：\n\n---\n"
+    ]
+
+    for idx, v in enumerate(videos, 1):
+        ana = v.get("analysis", {})
+        
+        card = f"""### {idx}. {v['title'][:32]}
+
+👤 **账号信息**：{v['author']} &nbsp;|&nbsp; 📅 {v['pub_date']} &nbsp;|&nbsp; ❤️ 点赞 {format_number(v['likes'])}
+
+📌 **视频内容**：{ana.get('summary')}
+💡 **值得借鉴的点**：{ana.get('takeaway')}
+🔥 **热门原因拆解**：{ana.get('viral_reason')}
+🚀 **如何借鉴复制**：{ana.get('replication')}
+🔗 [点击在抖音打开观看原视频]({v['share_url']})
+
+---
+"""
+        content_blocks.append(card)
+
+    full_markdown = "\n".join(content_blocks)
+
     if PUSHPLUS_TOKEN:
         try:
             url = "http://www.pushplus.plus/send"
             payload = {
                 "token": PUSHPLUS_TOKEN,
                 "title": title,
-                "content": content,
+                "content": full_markdown,
                 "template": "markdown"
             }
             res = requests.post(url, json=payload, timeout=12)
             if res.status_code == 200 and res.json().get("code") == 200:
-                print(f"[✔] 成功推送消息 '{title}' 至微信 (PushPlus)！")
+                print("[✔] 成功将 10 个精炼拆解视频推送到微信 (PushPlus)！")
             else:
                 print(f"[-] PushPlus 推送返回: {res.text}")
         except Exception as e:
-            print(f"[-] PushPlus 推送异常: {e}")
+            print(f"[-] PushPlus 推送失败: {e}")
 
     if SERVERCHAN_KEY:
         try:
             url = f"https://sctapi.ftqq.com/{SERVERCHAN_KEY}.send"
-            payload = {"title": title, "desp": content}
+            payload = {"title": title, "desp": full_markdown}
             requests.post(url, data=payload, timeout=12)
-            print(f"[✔] 成功发送至 Server酱！")
-        except Exception:
+            print("[✔] 成功发送至 Server酱！")
+        except Exception as e:
             pass
-
-def send_mobile_notifications(videos, date_str):
-    """按 8 个视频为一组分批推送，彻底突破 PushPlus 字符限制"""
-    print("\n[+] 正在将 Gemini 3.6 Flash 5维深度拆解报告分批推送到手机微信...")
-
-    # 每 8 个视频作为一条消息分批发送，确保绝不超过 PushPlus 2万字限制
-    chunk_size = 8
-    total_chunks = (len(videos) + chunk_size - 1) // chunk_size
-
-    for chunk_idx in range(total_chunks):
-        start_i = chunk_idx * chunk_size
-        chunk_videos = videos[start_i:start_i + chunk_size]
-        
-        batch_title = f"🤖 Gemini 3.6 Flash 抖音AI爆款拆解 ({chunk_idx+1}/{total_chunks})"
-        
-        content_blocks = [
-            f"# 🤖 Gemini 3.6 Flash 抖音AI爆款拆解 ({chunk_idx+1}/{total_chunks})\n",
-            f"**生成日期**: {date_str} &nbsp;|&nbsp; **本页条数**: {len(chunk_videos)} 个爆款拆解\n\n---\n"
-        ]
-
-        for idx, v in enumerate(chunk_videos, start_i + 1):
-            ana = v.get("analysis", {})
-            card = f"""## {idx}. {v['title'][:35]}
-
-👤 **账号信息**：{v['author']} &nbsp;|&nbsp; 📅 {v['pub_date']}
-❤️ 点赞 {format_number(v['likes'])} &nbsp;|&nbsp; ⭐ 收藏 {format_number(v['collects'])} &nbsp;|&nbsp; 💬 评论 {format_number(v['comments'])}
-
-📌 **视频内容**：
-{ana.get('summary')}
-
-💡 **值得借鉴的点**：
-{ana.get('takeaway')}
-
-🔥 **热门原因拆解**：
-{ana.get('viral_reason')}
-
-🚀 **如何借鉴复制**：
-{ana.get('replication')}
-
-🔗 [点击在抖音打开观看原视频]({v['share_url']})
-
----
-"""
-            content_blocks.append(card)
-
-        full_markdown = "\n".join(content_blocks)
-        push_single_message(batch_title, full_markdown)
-        time.sleep(2)  # 批次间停顿 2 秒
 
 if __name__ == "__main__":
     fetch_douyin_ai_videos()
