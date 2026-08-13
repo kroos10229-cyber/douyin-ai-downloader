@@ -29,8 +29,9 @@ jobs:
         run: |
           npx playwright install chromium --with-deps
 
-      - name: 执行抖音 AI 热门爆款抓取、AI 拆解与微信推送
+      - name: 执行纯抖音 (Douyin) AI 热门爆款抓取、AI 拆解与微信推送
         env:
+          DOUYIN_COOKIE: ${{ secrets.DOUYIN_COOKIE }}
           PUSHPLUS_TOKEN: ${{ secrets.PUSHPLUS_TOKEN }}
           SERVERCHAN_KEY: ${{ secrets.SERVERCHAN_KEY }}
           DEEPSEEK_API_KEY: ${{ secrets.DEEPSEEK_API_KEY }}
@@ -38,7 +39,7 @@ jobs:
         run: |
           python douyin_ai_crawler.py
 
-      - name: 打包上传每日视频与统计报告 (云端暂存供需时下载)
+      - name: 打包上传每日抖音视频与统计报告 (云端暂存供需时下载)
         uses: actions/upload-artifact@v4
         with:
           name: douyin-ai-videos-${{ github.run_id }}
