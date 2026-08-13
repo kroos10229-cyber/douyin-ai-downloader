@@ -1,14 +1,14 @@
-name: 抖音 AI 热门视频每日定时下载
+name: 抖音 AI 热门视频每日自动分析与手机推送
 
 on:
   schedule:
-    # 每天北京时间早上 08:00 (UTC 00:00) 线上自动触发执行
+    # 每天北京时间早上 08:00 (UTC 00:00) 线上自动触发
     - cron: '0 0 * * *'
   # 支持在 GitHub 网页上手动随时触发运行
   workflow_dispatch:
 
 jobs:
-  crawl-and-download:
+  crawl-analyze-and-push:
     runs-on: ubuntu-latest
 
     steps:
@@ -29,13 +29,16 @@ jobs:
         run: |
           npx playwright install chromium --with-deps
 
-      - name: 执行抖音 AI 热门视频抓取与下载
+      - name: 执行抖音 AI 热门爆款抓取、AI 拆解与微信推送
         env:
-          NOTIFY_WEBHOOK: ${{ secrets.NOTIFY_WEBHOOK }}
+          PUSHPLUS_TOKEN: ${{ secrets.PUSHPLUS_TOKEN }}
+          SERVERCHAN_KEY: ${{ secrets.SERVERCHAN_KEY }}
+          DEEPSEEK_API_KEY: ${{ secrets.DEEPSEEK_API_KEY }}
+          GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
         run: |
           python douyin_ai_crawler.py
 
-      - name: 打包上传每日视频与统计报告 (供在线下载)
+      - name: 打包上传每日视频与统计报告 (云端暂存供需时下载)
         uses: actions/upload-artifact@v4
         with:
           name: douyin-ai-videos-${{ github.run_id }}
