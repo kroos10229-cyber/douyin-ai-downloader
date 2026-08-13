@@ -103,14 +103,13 @@ def generate_ai_analysis(title, author, likes, collects, comments):
 创作者：{author}
 数据：点赞 {likes}，收藏 {collects}，评论 {comments}
 
-请严格按以下 4 个部分输出，内容要充实丰满、深入浅出，具有极强指导意义（拒绝简短套话）：
+请严格按以下 4 个部分输出，内容要充实丰满、深入浅出，具有极强指导意义：
 
-【视频内容】：详细总结视频的核心主题、演示的 AI 工具/玩法、操作逻辑与传递的价值。
-【值得借鉴的点】：分析视频在选题切入、前3秒吸睛、视觉呈现、文案节奏或互动设计上的优秀之处。
-【热门原因拆解】：从心理学与算法逻辑拆解为何能爆（如触达痛点、引发焦虑/好奇、爽点释放、极高完播率或高收藏价值）。
-【如何借鉴复制】：给出具体的对标复刻 SOP 步骤（1. 选题切入点 2. 前3秒文案脚本 3. 画面呈现方案 4. 评论区转化引流钩子）。"""
+【视频内容】：总结视频的核心主题、演示的 AI 工具/玩法与价值（80-120字）。
+【值得借鉴的点】：分析视频在选题切入、前3秒吸睛、视觉呈现或文案上的亮点（80-120字）。
+【热门原因拆解】：从心理学与算法逻辑拆解为何能爆（如触达痛点、完播率拉升或高收藏价值）（80-120字）。
+【如何借鉴复制】：给出具体的对标复刻 SOP 步骤（1. 选题切入点 2. 前3秒文案脚本 3. 画面呈现方案 4. 评论区转化引流钩子）（100-150字）。"""
 
-    # 1. 优先调用 Google Gemini 3.6 Flash 大模型 API
     if GEMINI_API_KEY:
         try:
             url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-3.6-flash:generateContent?key={GEMINI_API_KEY}"
@@ -123,11 +122,10 @@ def generate_ai_analysis(title, author, likes, collects, comments):
                 print(f"[✔] 成功调用 Google Gemini 3.6 Flash 大模型生成实时深度拆解！")
                 return parse_llm_response(content)
             else:
-                print(f"[!] Gemini API 返回状态码 {resp.status_code}: {resp.text[:150]}")
+                print(f"[!] Gemini API 返回状态码 {resp.status_code}")
         except Exception as e:
             print(f"[!] 调用 Gemini API 发生异常: {e}")
 
-    # 2. 备选调用 DeepSeek API
     if DEEPSEEK_API_KEY:
         try:
             resp = requests.post(
@@ -142,7 +140,6 @@ def generate_ai_analysis(title, author, likes, collects, comments):
         except Exception as e:
             print(f"[!] 调用 DeepSeek API 发生异常: {e}")
 
-    # 3. 兜底高精度引擎
     return heuristic_rich_analysis(title, author, likes, collects, comments)
 
 def heuristic_rich_analysis(title, author, likes, collects, comments):
@@ -154,15 +151,15 @@ def heuristic_rich_analysis(title, author, likes, collects, comments):
             break
 
     if "agent" in title.lower() or "智能体" in title:
-        summary = f"视频深入讲解了基于 {tool_name} 打造 AI Agent (智能体) 的全流程。演示了从零搭建、多智能体协同分工，到自动执行复杂业务逻辑（如自动写代码、自动搜集情报、自动生成报表）的惊艳效果。"
-        takeaway = f"1. 选题极其具有前瞻性，抓住了‘AI从对话走向自动干活’的行业大趋势；2. 演示过程逻辑清晰，用直观的任务跑通录屏建立极高的信任度；3. 强调‘无需编程基础’，大大降低了观众的学习门槛。"
-        viral_reason = f"1. **痛点触达**：击中了广大职场人与创业者‘降本增效、减少重复劳动’的强烈刚需；2. **爽点释放**：自动化执行过程带来极强的视觉与心理满足感；3. **高收藏率**：具有极高的方法论价值，观众倾向于先收藏‘以后慢慢学’。"
-        replication = f"**1. 选题切入**：对标‘用AI Agent帮我打工’主题；**2. 脚本结构**：前3秒出示Agent自动完成任务的最终成果 -> 痛点引导 -> 3步搭建教学；**3. 画面呈现**：录屏+高清放大关键步骤+醒目字幕；**4. 转化钩子**：评论区置顶‘扣1领同款Agent工作流配置文件’。"
+        summary = f"视频深入讲解了基于 {tool_name} 打造 AI Agent (智能体) 的全流程。演示了从零搭建、多智能体协同分工，到自动执行复杂业务逻辑的惊艳效果。"
+        takeaway = f"1. 选题抓住了‘AI从对话走向自动干活’的大趋势；2. 演示过程逻辑清晰，用直观的任务跑通录屏建立极高信任度；3. 强调‘无需编程基础’，降低学习门槛。"
+        viral_reason = f"1. **痛点触达**：击中了降本增效、减少重复劳动的强烈刚需；2. **爽点释放**：自动化执行带来极强心理满足感；3. **高收藏率**：具有极高方法论价值。"
+        replication = f"**1. 选题切入**：对标‘用AI Agent帮我打工’主题；**2. 脚本结构**：前3秒出示Agent成果 -> 痛点引导 -> 3步搭建教学；**3. 画面呈现**：录屏+高清放大关键步骤；**4. 转化钩子**：评论区置顶‘领同款Agent配置文件’。"
     else:
-        summary = f"视频针对 {tool_name} 提供了系统化、保姆级的实操教学。涵盖了从基础注册、高阶 Prompt 提示词编写技巧，到结合实际工作场景（如副业变现、办公自动化、图文创作）的落地指南。"
-        takeaway = f"1. 结构化极强，采用‘问题-方案-结果’的清晰主线；2. 提示词可以直接拿来即用，实用价值拉满；3. 语言通俗易懂，摒弃复杂技术术语，普通观众也能轻松听懂。"
-        viral_reason = f"1. **利他属性极强**：干货满满的保姆级教程极易引发观众转发给朋友或收藏保存；2. **降低焦虑**：帮观众破除了对新科技的恐慌感；3. **算法偏好**：高完播率与高收藏量直接触发抖音流量池二次推荐。"
-        replication = f"**1. 选题切入**：找准某一特定群体（如新手、大学生、文案、电商人）的 {tool_name} 用法；**2. 脚本结构**：‘别再用老方法了！教你用 {tool_name} 3分钟搞定’ -> 分步骤拆解 -> 提示词展示；**3. 画面呈现**：高清实操画面+关键按钮红框标注；**4. 转化钩子**：‘提示词保姆级文档已整理，看评论区领’。"
+        summary = f"视频针对 {tool_name} 提供了系统化、保姆级的实操教学。涵盖了从基础注册、高阶 Prompt 提示词编写技巧，到结合实际工作场景的落地指南。"
+        takeaway = f"1. 结构化极强，采用‘问题-方案-结果’主线；2. 提示词可以直接拿来即用；3. 语言通俗易懂，普通观众也能轻松听懂。"
+        viral_reason = f"1. **利他属性极强**：干货满满极易引发观众转发或收藏；2. **降低焦虑**：帮观众破除了对新科技的恐慌感；3. **算法偏好**：高完播率与高收藏量触发二次推荐。"
+        replication = f"**1. 选题切入**：找准特定群体的 {tool_name} 用法；**2. 脚本结构**：‘别再用老方法了！教你用 {tool_name} 搞定’ -> 分步骤拆解 -> 提示词展示；**3. 画面呈现**：高清实操画面；**4. 转化钩子**：‘提示词保姆级文档在评论区领’。"
 
     return {
         "summary": summary,
@@ -314,7 +311,7 @@ def fetch_douyin_ai_videos():
     return final_videos
 
 
-# ==================== 6. 报告导出与手机端微信排版升级推送 ====================
+# ==================== 6. 报告导出与微信分批/分块安全推送 ====================
 
 def save_reports(today_dir, videos, date_str):
     """保存本地 Markdown 报告与 JSON 数据"""
@@ -324,7 +321,7 @@ def save_reports(today_dir, videos, date_str):
 
     md_path = os.path.join(today_dir, "daily_report.md")
     with open(md_path, "w", encoding="utf-8") as f:
-        f.write(f"# 🎵 抖音 AI 爆款 Gemini 3.6 Flash 深度拆解日报 ({date_str})\n\n")
+        f.write(f"# 🤖 抖音 AI 爆款 Gemini 3.6 Flash 深度拆解日报 ({date_str})\n\n")
         f.write(f"> 精选近 30 天内最新发出的 {len(videos)} 个头部爆款 AI 视频 | Google Gemini 3.6 Flash 实时 AI 剖析\n\n")
         
         for idx, v in enumerate(videos, 1):
@@ -338,26 +335,61 @@ def save_reports(today_dir, videos, date_str):
             f.write(f"🚀 **如何借鉴复制**:\n{ana.get('replication')}\n\n")
             f.write("---\n\n")
 
+def push_single_message(title, content):
+    """单条消息发送处理"""
+    if PUSHPLUS_TOKEN:
+        try:
+            url = "http://www.pushplus.plus/send"
+            payload = {
+                "token": PUSHPLUS_TOKEN,
+                "title": title,
+                "content": content,
+                "template": "markdown"
+            }
+            res = requests.post(url, json=payload, timeout=12)
+            if res.status_code == 200 and res.json().get("code") == 200:
+                print(f"[✔] 成功推送消息 '{title}' 至微信 (PushPlus)！")
+            else:
+                print(f"[-] PushPlus 推送返回: {res.text}")
+        except Exception as e:
+            print(f"[-] PushPlus 推送异常: {e}")
+
+    if SERVERCHAN_KEY:
+        try:
+            url = f"https://sctapi.ftqq.com/{SERVERCHAN_KEY}.send"
+            payload = {"title": title, "desp": content}
+            requests.post(url, data=payload, timeout=12)
+            print(f"[✔] 成功发送至 Server酱！")
+        except Exception:
+            pass
+
 def send_mobile_notifications(videos, date_str):
-    """发送搭载 Gemini 3.6 Flash 大模型拆解的微信推送报告"""
-    print("\n[+] 正在将 Gemini 3.6 Flash 深度拆解报告推送到手机微信...")
+    """按 8 个视频为一组分批推送，彻底突破 PushPlus 字符限制"""
+    print("\n[+] 正在将 Gemini 3.6 Flash 5维深度拆解报告分批推送到手机微信...")
 
-    title = f"🤖 Gemini 3.6 Flash 抖音 AI 爆款拆解日报 ({date_str})"
-    
-    content_blocks = [
-        f"# 🤖 Gemini 3.6 Flash 抖音 AI 爆款拆解日报\n",
-        f"**驱动模型**: Google Gemini 3.6 Flash &nbsp;|&nbsp; **精选视频数**: {len(videos)} 个全新爆款\n\n---\n"
-    ]
+    # 每 8 个视频作为一条消息分批发送，确保绝不超过 PushPlus 2万字限制
+    chunk_size = 8
+    total_chunks = (len(videos) + chunk_size - 1) // chunk_size
 
-    for idx, v in enumerate(videos, 1):
-        ana = v.get("analysis", {})
+    for chunk_idx in range(total_chunks):
+        start_i = chunk_idx * chunk_size
+        chunk_videos = videos[start_i:start_i + chunk_size]
         
-        card = f"""## {idx}. {v['title'][:35]}
+        batch_title = f"🤖 Gemini 3.6 Flash 抖音AI爆款拆解 ({chunk_idx+1}/{total_chunks})"
+        
+        content_blocks = [
+            f"# 🤖 Gemini 3.6 Flash 抖音AI爆款拆解 ({chunk_idx+1}/{total_chunks})\n",
+            f"**生成日期**: {date_str} &nbsp;|&nbsp; **本页条数**: {len(chunk_videos)} 个爆款拆解\n\n---\n"
+        ]
+
+        for idx, v in enumerate(chunk_videos, start_i + 1):
+            ana = v.get("analysis", {})
+            card = f"""## {idx}. {v['title'][:35]}
 
 👤 **账号信息**：{v['author']} &nbsp;|&nbsp; 📅 {v['pub_date']}
 ❤️ 点赞 {format_number(v['likes'])} &nbsp;|&nbsp; ⭐ 收藏 {format_number(v['collects'])} &nbsp;|&nbsp; 💬 评论 {format_number(v['comments'])}
 
-📌 **视频讲的啥**：
+📌 **视频内容**：
 {ana.get('summary')}
 
 💡 **值得借鉴的点**：
@@ -373,35 +405,11 @@ def send_mobile_notifications(videos, date_str):
 
 ---
 """
-        content_blocks.append(card)
+            content_blocks.append(card)
 
-    full_markdown = "\n".join(content_blocks)
-
-    if PUSHPLUS_TOKEN:
-        try:
-            url = "http://www.pushplus.plus/send"
-            payload = {
-                "token": PUSHPLUS_TOKEN,
-                "title": title,
-                "content": full_markdown,
-                "template": "markdown"
-            }
-            res = requests.post(url, json=payload, timeout=12)
-            if res.status_code == 200 and res.json().get("code") == 200:
-                print("[✔] 成功将 Gemini 3.6 Flash 大模型拆解报告推送到微信 (PushPlus)！")
-            else:
-                print(f"[-] PushPlus 推送返回: {res.text}")
-        except Exception as e:
-            print(f"[-] PushPlus 推送失败: {e}")
-
-    if SERVERCHAN_KEY:
-        try:
-            url = f"https://sctapi.ftqq.com/{SERVERCHAN_KEY}.send"
-            payload = {"title": title, "desp": full_markdown}
-            requests.post(url, data=payload, timeout=12)
-            print("[✔] 成功发送至 Server酱！")
-        except Exception as e:
-            pass
+        full_markdown = "\n".join(content_blocks)
+        push_single_message(batch_title, full_markdown)
+        time.sleep(2)  # 批次间停顿 2 秒
 
 if __name__ == "__main__":
     fetch_douyin_ai_videos()

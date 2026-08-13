@@ -7,6 +7,9 @@ on:
   # 支持在 GitHub 网页上手动随时触发运行
   workflow_dispatch:
 
+permissions:
+  contents: write
+
 jobs:
   crawl-analyze-and-push:
     runs-on: ubuntu-latest
@@ -29,7 +32,7 @@ jobs:
         run: |
           npx playwright install chromium --with-deps
 
-      - name: 执行纯抖音 (Douyin) AI 最新爆款抓取、AI 拆解与微信推送
+      - name: 执行纯抖音 (Douyin) AI 最新爆款抓取、Gemini 3.6 Flash 拆解与微信推送
         env:
           DOUYIN_COOKIE: ${{ secrets.DOUYIN_COOKIE }}
           PUSHPLUS_TOKEN: ${{ secrets.PUSHPLUS_TOKEN }}
