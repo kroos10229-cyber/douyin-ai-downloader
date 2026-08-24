@@ -9,13 +9,13 @@ import requests
 
 # ==================== 1. 核心配置项 ====================
 
-# 搜索关键词列表
-KEYWORDS = [
+# 基础搜索种子关键词（用于动态拓词与保底搜索）
+BASE_KEYWORDS = [
     "AI", "AIGC", "agent", "ChatGPT", "DeepSeek", "Claude",
-    "千问", "Kimi", "GLM", "Gemini", "Grok", "大模型"
+    "千问", "Kimi", "GLM", "Gemini", "Grok", "大模型", "智能体"
 ]
 
-# 过滤与去重规则
+# 过滤与排序规则
 MIN_LIKES = 3000          # 优先筛选点赞 3000 以上的高热度抖音视频
 MAX_AGE_DAYS = 30         # 严格限定发布时间：只抓取近 30 天内发布的新视频
 TARGET_MIN_VIDEOS = 10     # 每日推送精确为 10 个精选爆款
@@ -92,37 +92,88 @@ def download_video(video_url, output_path):
     return False
 
 
-# ==================== 4. 黄金黄金比例黄金拆解引擎 ====================
+# ==================== 4. 动态热搜与联想词拓词模块 ====================
+
+def fetch_douyin_sug_keywords(headers):
+    """
+    通过抖音联想词与热搜接口，动态拓充当天的热门搜索词库
+    """
+    print("[+] 正在探测抖音今日 AI 实时热搜词与搜索联想词...")
+    sug_keywords = []
+    discovered_tags = []
+
+    seed_pool = ["AI", "DeepSeek", "智能体", "ChatGPT", "大模型", "AIGC"]
+
+    for seed in seed_pool:
+        sug_url = f"https://www.douyin.com/aweme/v1/web/search/sug/?keyword={urllib.parse.quote(seed)}&aid=6383&device_platform=webapp"
+        try:
+            r = requests.get(sug_url, headers=headers, timeout=6)
+            if r.status_code == 200:
+                data = r.json()
+                sug_list = data.get("sug_list", []) or []
+                for item in sug_list[:4]:
+                    word = item.get("content", "").strip()
+                    if word and word not in sug_keywords and word not in BASE_KEYWORDS:
+                        sug_keywords.append(word)
+                        discovered_tags.append(word)
+        except Exception:
+            pass
+        time.sleep(0.3)
+
+    combined_keywords = list(dict.fromkeys(BASE_KEYWORDS + sug_keywords))
+    print(f"[✔] 动态词库构建完成！基础词 {len(BASE_KEYWORDS)} 个 + 今日飙升热搜词 {len(sug_keywords)} 个。")
+    if discovered_tags:
+        print(f"    🔥 发现今日热搜关联词: {', '.join(discovered_tags[:8])}")
+    
+    return combined_keywords, discovered_tags
+
+
+# ==================== 5. 创作者级 AI 爆款拆解引擎 ====================
 
 def generate_ai_analysis(title, author, likes, collects, comments):
     """
-    黄金比例拆解：内容适中充实，结构清晰，既不冗长也不过于简短
+    深度拆解：输出创作者最关心的“爆款属性”、“黄金前3秒钩子”、“四段式复刻脚本”与“引流话术”
     """
-    time.sleep(1.5)  # 控频防 API 429 限制
+    time.sleep(1.2)  # 控频防 API 429 限制
+
+    collect_ratio = (collects / likes * 100) if likes > 0 else 0
+    ratio_desc = f"收藏率高达 {collect_ratio:.1f}%（干货实用型）" if collect_ratio >= 25 else f"收藏率 {collect_ratio:.1f}%"
 
     if GEMINI_API_KEY:
         try:
-            prompt = f"""你是一名抖音短视频爆款拆解专家。请对以下【抖音】AI热门视频进行黄金比例深度拆解（内容要求充实适中，每项约 2-3 句，给出具体落地方案）：
+            prompt = f"""你是一名抖音千万播放短视频编导与爆款拆解专家。请对以下【抖音 AI/大模型】高互动视频进行针对创作者的深度复刻拆解：
 
+【视频数据】
 标题：{title}
 创作者：{author}
-数据：点赞 {likes}，收藏 {collects}，评论 {comments}
+数据：点赞 {likes}，收藏 {collects}（{ratio_desc}），评论 {comments}
 
-输出格式要求（严格按以下 4 个标题，冒号后输出具体剖析）：
-📌 视频内容：[2-3句总结视频的核心场景、演示的 AI 工具/玩法与落地价值]
-💡 值得借鉴的点：[2句总结选题切入、前3秒视觉卡点或文案亮点]
-🔥 热门原因拆解：[2句分析触达的观众痛点、完播率拉升与算法收藏推荐逻辑]
-🚀 如何借鉴复制：[给出 4 步复刻 SOP：1.选题切入 2.前3秒脚本 3.画面呈现 4.评论区钩子]"""
+请严格按以下 4 项格式输出（每项保持干练，具有直接指导实操拍片价值）：
 
-            url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-3.6-flash:generateContent?key={GEMINI_API_KEY}"
+🎯 爆款属性定位：[1句话指出核心受众画像与内容类型，如：高收藏实操干货 / 职场提效痛点反差 / 认知颠覆]
+⏱️ 黄金前3秒钩子：[给出直接可照读的第1句开场台词 + 前3秒视觉画面设计（如痛点提问/展示震惊成果）]
+🎬 四段式复刻脚本：
+  • 0-5s 痛点/成果：[开篇痛点引发共鸣或惊艳成果展示]
+  • 5-25s 工具实操：[核心 AI 工具演示与关键步骤]
+  • 25-45s 避坑/提效：[对比传统做法的效率提升或避坑要点]
+  • 45-60s 转化收尾：[引导互动、点赞收藏或资料领取]
+💬 评论区引流钩子：[建议作者置顶的话术与引导粉丝扣1领取资料/提示词的具体技巧]"""
+
+            model_name = "gemini-2.5-flash"
+            url = f"https://generativelanguage.googleapis.com/v1beta/models/{model_name}:generateContent?key={GEMINI_API_KEY}"
             headers = {"Content-Type": "application/json"}
             payload = {"contents": [{"parts": [{"text": prompt}]}]}
-            resp = requests.post(url, headers=headers, json=payload, timeout=10)
+            
+            resp = requests.post(url, headers=headers, json=payload, timeout=12)
+            if resp.status_code != 200:
+                url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key={GEMINI_API_KEY}"
+                resp = requests.post(url, headers=headers, json=payload, timeout=12)
+
             if resp.status_code == 200:
                 text = resp.json()["candidates"][0]["content"]["parts"][0]["text"].strip()
                 res = parse_llm_text_clean(text)
-                if res["summary"] and "【" not in res["summary"]:
-                    print(f"[✔] 成功调用 Gemini 3.6 Flash 生成黄金比例深度拆解！")
+                if res["hook"] and "【" not in res["positioning"]:
+                    print(f"[✔] 成功调用 Gemini 生成创作者级爆款复刻拆解！")
                     return res
         except Exception as e:
             print(f"[!] 调用 Gemini API 异常: {e}")
@@ -130,69 +181,113 @@ def generate_ai_analysis(title, author, likes, collects, comments):
     return heuristic_balanced_analysis(title, author, likes, collects, comments)
 
 def parse_llm_text_clean(text):
-    """解析大模型文本，确保提取出真实的深度剖析文字"""
-    summary, takeaway, viral_reason, replication = "", "", "", ""
+    """解析大模型文本，提取创作者 4 维核心字段"""
+    positioning, hook, script_sop, cta_hook = "", "", "", ""
+    current_section = ""
+    script_lines = []
+
     for line in text.split("\n"):
         line_s = line.strip()
-        if "📌 视频内容" in line_s or "视频内容" in line_s:
-            summary = line_s.split("：")[-1].strip() if "：" in line_s else line_s
-        elif "💡 值得借鉴的点" in line_s or "值得借鉴" in line_s:
-            takeaway = line_s.split("：")[-1].strip() if "：" in line_s else line_s
-        elif "🔥 热门原因拆解" in line_s or "热门原因" in line_s:
-            viral_reason = line_s.split("：")[-1].strip() if "：" in line_s else line_s
-        elif "🚀 如何借鉴复制" in line_s or "借鉴复制" in line_s:
-            replication = line_s.split("：")[-1].strip() if "：" in line_s else line_s
+        if not line_s:
+            continue
+        if "🎯 爆款属性定位" in line_s or "爆款属性" in line_s:
+            current_section = "pos"
+            positioning = line_s.split("：")[-1].strip() if "：" in line_s else line_s
+        elif "⏱️ 黄金前3秒钩子" in line_s or "黄金前3秒" in line_s:
+            current_section = "hook"
+            hook = line_s.split("：")[-1].strip() if "：" in line_s else line_s
+        elif "🎬 四段式复刻脚本" in line_s or "复刻脚本" in line_s:
+            current_section = "script"
+        elif "💬 评论区引流钩子" in line_s or "评论区" in line_s:
+            current_section = "cta"
+            cta_hook = line_s.split("：")[-1].strip() if "：" in line_s else line_s
+        else:
+            if current_section == "script":
+                script_lines.append(line_s)
+            elif current_section == "pos" and not positioning:
+                positioning = line_s
+            elif current_section == "hook" and not hook:
+                hook = line_s
+            elif current_section == "cta" and not cta_hook:
+                cta_hook = line_s
 
-    summary = summary.replace("【视频内容】", "").strip()
-    takeaway = takeaway.replace("【值得借鉴的点】", "").strip()
-    viral_reason = viral_reason.replace("【热门原因拆解】", "").strip()
-    replication = replication.replace("【如何借鉴复制】", "").strip()
+    script_sop = "\n".join(script_lines) if script_lines else ""
 
-    if not summary: summary = "详细演示了 AI 工具在真实工作场景中的应用流程与效率倍增技巧。"
-    if not takeaway: takeaway = "1. 选题抓住了‘降本增效’痛点；2. 前 3 秒展示惊艳成效拉高留存。"
-    if not viral_reason: viral_reason = "干货属性强引发大量收藏，高完播率成功触发算法二次流量池推流。"
-    if not replication: replication = "1️⃣ 选题切入：对标同类痛点；2️⃣ 前3秒脚本：成果展示；3️⃣ 画面：实操录屏；4️⃣ 钩子：评论区领资源。"
+    # 清理多余标签
+    positioning = re.sub(r'^[🎯\s*]+', '', positioning).replace("爆款属性定位：", "").strip()
+    hook = re.sub(r'^[⏱️\s*]+', '', hook).replace("黄金前3秒钩子：", "").strip()
+    cta_hook = re.sub(r'^[💬\s*]+', '', cta_hook).replace("评论区引流钩子：", "").strip()
+
+    if not positioning: positioning = "面向职场办公与自媒体人群的高实用价值实操教程。"
+    if not hook: hook = "台词：‘如果你还在手动做这个，AI 早就能 3 秒搞定了！’ + 画面：展示效率倍增的震撼成果录屏。"
+    if not script_sop: 
+        script_sop = "• 0-5s 痛点：展示繁琐旧流程与 AI 极速成片对比\n• 5-25s 实操：演示核心 Prompt 与工具操作页面\n• 25-45s 提效：展示最终产出物并标明节省的时间\n• 45-60s 转化：引导去评论区获取同款配置与提示词"
+    if not cta_hook: cta_hook = "置顶评论：‘视频里用到的完整提示词和工具链接已经打包，评论区扣【资料】私信发送！’"
 
     return {
-        "summary": summary,
-        "takeaway": takeaway,
-        "viral_reason": viral_reason,
-        "replication": replication
+        "positioning": positioning,
+        "hook": hook,
+        "script_sop": script_sop,
+        "cta_hook": cta_hook
     }
 
 def heuristic_balanced_analysis(title, author, likes, collects, comments):
-    """内置黄金比例拆解规则"""
+    """内置离线规则库（当无大模型 Key 或 API 异常时保障输出质量）"""
     tool_name = "AI大模型"
-    for k in ["DeepSeek", "ChatGPT", "Claude", "千问", "Kimi", "GLM", "Gemini", "Grok", "Sora", "即梦"]:
+    for k in ["DeepSeek", "ChatGPT", "Claude", "千问", "Kimi", "GLM", "Gemini", "Grok", "Sora", "即梦", "Agent"]:
         if k.lower() in title.lower():
             tool_name = k
             break
 
+    collect_ratio = (collects / likes * 100) if likes > 0 else 0
+
     if "agent" in title.lower() or "智能体" in title:
-        summary = f"深入演示了用 {tool_name} 零代码搭建专属 AI Agent 并自动执行复杂业务全流程的硬核操作。"
-        takeaway = f"1. 选题抓住了‘AI从对话进化到替我自动打工’的趋势；2. 用直观的录屏呈现跑通成果，建立强信任感。"
-        viral_reason = f"1. **痛点触达**：精准击中观众降本增效的刚需；2. **爽点释放**：自动化执行过程带来极强成就心理。"
-        replication = f"1️⃣ 选题切入：对标‘用AI Agent帮我打工’；2️⃣ 前3秒脚本：抛出Agent成果；3️⃣ 画面呈现：高清放大步骤；4️⃣ 转化钩子：评论区领配置文件。"
+        positioning = f"聚焦‘AI自动打工’的前沿高价值实操，击中职场人自动化提效刚需（收藏率 {collect_ratio:.1f}%）。"
+        hook = f"台词：‘别再自己熬夜加班了，教你用 {tool_name} 搭建专属智能体，全自动跑通业务！’ + 画面：展示 Agent 自动敲代码/产出报告全过程。"
+        script_sop = (
+            f"• 0-5s 痛点：抛出痛点‘一个人干一个团队的活’\n"
+            f"• 5-25s 实操：展示 {tool_name} 的工作流搭建关键节点\n"
+            f"• 25-45s 提效：运行 Agent 并输出成品，直观呈现 10 倍效率\n"
+            f"• 45-60s 转化：提示词/工作流配置文件引导评论区自取"
+        )
+        cta_hook = f"置顶评论：‘搭建智能体的完整配置文件和 Prompt 模板已整理好，评论区扣【666】发你！’"
+    elif "提示词" in title or "prompt" in title.lower() or "教程" in title:
+        positioning = f"保姆级指令/技巧教学，极强利他属性引发观众高收藏（收藏率 {collect_ratio:.1f}%）。"
+        hook = f"台词：‘90% 的人都不知道，{tool_name} 只要加上这 3 句提示词，输出质量直接翻倍！’ + 画面：前后输出效果强烈对比。"
+        script_sop = (
+            f"• 0-5s 痛点：展示普通提问的平庸回答 vs 高阶 Prompt 的惊艳回答\n"
+            f"• 5-25s 实操：逐句拆解这套万能公式的底层逻辑\n"
+            f"• 25-45s 提效：套用到真实业务场景（写文案/做方案/分析数据）\n"
+            f"• 45-60s 转化：点赞收藏防止找不到，引导评论区领完整指令库"
+        )
+        cta_hook = f"置顶评论：‘高清版提示词思维导图已放在后台，评论区回复【学习】免费获取！’"
     else:
-        summary = f"系统讲解了 {tool_name} 的保姆级实操教学，涵盖高阶 Prompt 提示词编写与垂直应用场景。"
-        takeaway = f"1. ‘问题-方案-结果’主线清晰；2. 提示词可直接拿来使用，实用价值拉满。"
-        viral_reason = f"1. **利他属性强**：保姆级教程引发大量主动收藏；2. **降低恐慌**：帮观众破除了对新科技的门槛感。"
-        replication = f"1️⃣ 选题切入：找准特定群体的 {tool_name} 用法；2️⃣ 前3秒脚本：‘教你用 {tool_name} 3分钟搞定’；3️⃣ 画面：实操标注；4️⃣ 钩子：评论区领完整文档。"
+        positioning = f"结合当下 {tool_name} 热门话题的降本增效解决方案，适合快速复刻跟进流量。"
+        hook = f"台词：‘看完这个视频，彻底颠覆你对 {tool_name} 的认知！’ + 画面：快节奏卡点演示神器核心界面。"
+        script_sop = (
+            f"• 0-5s 痛点：提出当下行业/职场普遍痛点\n"
+            f"• 5-25s 实操：演示核心功能与 3 步操作步骤\n"
+            f"• 25-45s 提效：输出成品效果展示，强化实用性\n"
+            f"• 45-60s 转化：号召点赞关注，下期分享更硬核技巧"
+        )
+        cta_hook = f"置顶评论：‘你平时用 {tool_name} 最多的场景是什么？欢迎在评论区交流避坑！’"
 
     return {
-        "summary": summary,
-        "takeaway": takeaway,
-        "viral_reason": viral_reason,
-        "replication": replication
+        "positioning": positioning,
+        "hook": hook,
+        "script_sop": script_sop,
+        "cta_hook": cta_hook
     }
 
 
-# ==================== 5. 抖音 (Douyin) 搜索与过滤核心 ====================
+# ==================== 6. 抖音搜索与综合爆款价值排序 ====================
 
 def fetch_douyin_ai_videos():
-    """检索并筛选 30 天内发布、点赞 >= 3000 且历史未推送过的 10 个抖音 AI 视频"""
+    """
+    检索并筛选 30 天内发布、点赞 >= 3000、综合爆款指数最高的 10 个抖音 AI 视频
+    """
     print("==========================================")
-    print("🎯 开始抓取 抖音 (Douyin) 最新 10 个 AI 热门视频...")
+    print("🎯 开始抓取 抖音 (Douyin) 今日高价值 AI 爆款视频与搜索趋势...")
     print("==========================================")
 
     history_set = load_history_ids()
@@ -204,13 +299,18 @@ def fetch_douyin_ai_videos():
         "Cookie": DOUYIN_COOKIE
     }
     
+    # 1. 动态拓充今日热搜词库
+    search_keywords, discovered_tags = fetch_douyin_sug_keywords(headers)
+
     captured_videos = []
     seen_in_run = set()
 
     now_ts = int(time.time())
     max_age_seconds = MAX_AGE_DAYS * 86400
 
-    for kw in KEYWORDS:
+    print(f"\n[+] 开始全网扫描 {len(search_keywords)} 个 AI 核心关键词及热搜词...")
+
+    for kw in search_keywords:
         url = "https://www.douyin.com/aweme/v1/web/general/search/single/"
         params = {
             "device_platform": "webapp",
@@ -272,6 +372,22 @@ def fetch_douyin_ai_videos():
 
                         pub_date = datetime.datetime.fromtimestamp(create_time).strftime("%Y-%m-%d") if create_time else "最近"
 
+                        # 计算收藏率与综合爆款得分 (加权高收藏干货)
+                        collect_rate = (collect_count / digg_count * 100) if digg_count > 0 else 0
+                        comment_rate = (comment_count / digg_count * 100) if digg_count > 0 else 0
+                        viral_score = int(digg_count * 1.0 + collect_count * 3.5 + comment_count * 2.5)
+
+                        # 标签分类
+                        tags = []
+                        if collect_rate >= 25:
+                            tags.append("⭐高收藏干货")
+                        if comment_rate >= 4:
+                            tags.append("💬高互动热议")
+                        if digg_count >= 50000:
+                            tags.append("💥超级大爆款")
+                        if not tags:
+                            tags.append("💡高潜选题")
+
                         seen_in_run.add(aweme_id)
                         captured_videos.append({
                             "id": aweme_id,
@@ -280,6 +396,11 @@ def fetch_douyin_ai_videos():
                             "likes": digg_count,
                             "collects": collect_count,
                             "comments": comment_count,
+                            "collect_rate": collect_rate,
+                            "comment_rate": comment_rate,
+                            "viral_score": viral_score,
+                            "tag": " | ".join(tags),
+                            "matched_keyword": kw,
                             "pub_date": pub_date,
                             "platform": "抖音",
                             "video_url": video_url,
@@ -288,16 +409,17 @@ def fetch_douyin_ai_videos():
         except Exception as e:
             print(f"[-] 抖音 API 搜索 '{kw}' 发生异常: {e}")
 
+    # 按爆款综合得分排序（高收藏权重更高）
     filtered_videos = [v for v in captured_videos if v["likes"] >= MIN_LIKES]
-    filtered_videos.sort(key=lambda x: (x["likes"] + x["collects"] * 2), reverse=True)
+    filtered_videos.sort(key=lambda x: x["viral_score"], reverse=True)
 
     if len(filtered_videos) < TARGET_MIN_VIDEOS and captured_videos:
-        all_sorted = sorted(captured_videos, key=lambda x: (x["likes"] + x["collects"] * 2), reverse=True)
+        all_sorted = sorted(captured_videos, key=lambda x: x["viral_score"], reverse=True)
         final_videos = all_sorted[:TARGET_MAX_VIDEOS]
     else:
         final_videos = filtered_videos[:TARGET_MAX_VIDEOS]
 
-    print(f"\n[+] 筛选完成！已精选出 {len(final_videos)} 个【近 30 天内最新】热门抖音 AI 视频。")
+    print(f"\n[+] 筛选完成！已精选出 {len(final_videos)} 个【综合价值最高】的抖音 AI 爆款视频。")
 
     if not final_videos:
         print("[-] 提示: 未搜集到符合条件的最新抖音视频，请检查 Cookie 有效性。")
@@ -308,20 +430,20 @@ def fetch_douyin_ai_videos():
     os.makedirs(today_dir, exist_ok=True)
 
     for idx, item in enumerate(final_videos, 1):
-        print(f"[{idx}/{len(final_videos)}] [抖音] {item['title'][:30]} | 📅 {item['pub_date']} | ❤️ 点赞: {format_number(item['likes'])}")
+        print(f"[{idx}/{len(final_videos)}] [{item['tag']}] {item['title'][:28]}... | ❤️ {format_number(item['likes'])} | ⭐ 收藏率: {item['collect_rate']:.1f}%")
         item["analysis"] = generate_ai_analysis(item["title"], item["author"], item["likes"], item["collects"], item["comments"])
         history_set.add(item["id"])
 
-    save_reports(today_dir, final_videos, date_str)
-    send_mobile_notifications(final_videos, date_str)
+    save_reports(today_dir, final_videos, date_str, discovered_tags)
+    send_mobile_notifications(final_videos, date_str, discovered_tags)
     save_history_ids(history_set)
 
     return final_videos
 
 
-# ==================== 6. 报告导出与微信黄金比例单条推送 ====================
+# ==================== 7. 报告导出与微信全景推送 ====================
 
-def save_reports(today_dir, videos, date_str):
+def save_reports(today_dir, videos, date_str, discovered_tags):
     """保存本地 Markdown 报告与 JSON 数据"""
     json_path = os.path.join(today_dir, "metadata.json")
     with open(json_path, "w", encoding="utf-8") as f:
@@ -329,49 +451,63 @@ def save_reports(today_dir, videos, date_str):
 
     md_path = os.path.join(today_dir, "daily_report.md")
     with open(md_path, "w", encoding="utf-8") as f:
-        f.write(f"# 🎵 抖音 AI 爆款 Gemini 3.6 Flash 深度拆解日报 ({date_str})\n\n")
-        f.write(f"> 精选近 30 天最新 10 个头部爆款 AI 视频 | 黄金比例深度拆解\n\n")
+        f.write(f"# 🎵 抖音 AI 热门爆款与创作者复刻日报 ({date_str})\n\n")
+        
+        if discovered_tags:
+            tags_str = " &nbsp;|&nbsp; ".join([f"`{t}`" for t in discovered_tags[:8]])
+            f.write(f"> 🔥 **今日抖音 AI 热搜飙升词**: {tags_str}\n\n")
+        else:
+            f.write(f"> 精选近 30 天高收藏/高互动 AI 爆款视频 | 创作者 1:1 分镜头脚本复刻指南\n\n")
         
         for idx, v in enumerate(videos, 1):
             ana = v.get("analysis", {})
-            f.write(f"## {idx}. {v['title']}\n\n")
-            f.write(f"👤 **账号信息**: {v['author']} &nbsp;|&nbsp; 📅 {v['pub_date']} &nbsp;|&nbsp; ❤️ 点赞 {format_number(v['likes'])} &nbsp;|&nbsp; ⭐ 收藏 {format_number(v['collects'])}\n\n")
+            f.write(f"## {idx}. 【{v['tag']}】{v['title']}\n\n")
+            f.write(f"👤 **创作者**: {v['author']} &nbsp;|&nbsp; 📅 {v['pub_date']} &nbsp;|&nbsp; 🏆 爆款指数: **{format_number(v['viral_score'])}**\n")
+            f.write(f"❤️ **点赞**: {format_number(v['likes'])} &nbsp;|&nbsp; ⭐ **收藏**: {format_number(v['collects'])} (**{v['collect_rate']:.1f}%**) &nbsp;|&nbsp; 💬 **评论**: {format_number(v['comments'])}\n\n")
             f.write(f"🔗 **原视频链接**: [{v['share_url']}]({v['share_url']})\n\n")
-            f.write(f"📌 **视频内容**: {ana.get('summary')}\n\n")
-            f.write(f"💡 **值得借鉴的点**: {ana.get('takeaway')}\n\n")
-            f.write(f"🔥 **热门原因拆解**: {ana.get('viral_reason')}\n\n")
-            f.write(f"🚀 **如何借鉴复制**: {ana.get('replication')}\n\n")
+            f.write(f"🎯 **爆款定位**: {ana.get('positioning')}\n\n")
+            f.write(f"⏱️ **黄金前 3 秒钩子**:\n{ana.get('hook')}\n\n")
+            f.write(f"🎬 **四段式复刻脚本**:\n```text\n{ana.get('script_sop')}\n```\n\n")
+            f.write(f"💬 **评论区引流钩子**:\n{ana.get('cta_hook')}\n\n")
             f.write("---\n\n")
 
-def send_mobile_notifications(videos, date_str):
-    """发送黄金比例、充实干练、单条全收齐的微信推送报告"""
-    print("\n[+] 正在将 10 个黄金比例拆解视频推送到手机微信...")
+    print(f"[✔] 已生成本地完整报告: {md_path}")
 
-    title = f"🎵 抖音 AI 热门爆款拆解 ({date_str})"
+def send_mobile_notifications(videos, date_str, discovered_tags):
+    """发送创作者实战复刻版微信推送"""
+    print("\n[+] 正在将 10 个创作者爆款复刻指南推送到手机微信...")
+
+    title = f"🎵 抖音 AI 爆款与复刻指南 ({date_str})"
     
+    tags_line = ""
+    if discovered_tags:
+        tags_line = f"🔥 **今日热搜词**：{'、'.join(discovered_tags[:6])}\n\n"
+
     content_blocks = [
-        f"# 🎵 抖音 AI 热门爆款拆解 ({date_str})\n",
-        f"今日精选 **{len(videos)} 个全新抖音 AI 爆款**（限定 30 天内最新发布）：\n\n---\n"
+        f"# 🎵 抖音 AI 热门爆款复刻指南 ({date_str})\n",
+        tags_line,
+        f"今日精选 **{len(videos)} 个高收藏/高互动 AI 爆款**（近 30 天内发布）：\n\n---\n"
     ]
 
     for idx, v in enumerate(videos, 1):
         ana = v.get("analysis", {})
         
-        card = f"""### {idx}. {v['title'][:35]}
+        card = f"""### {idx}. 【{v['tag']}】{v['title'][:32]}
 
-👤 **账号信息**：{v['author']} &nbsp;|&nbsp; 📅 {v['pub_date']} &nbsp;|&nbsp; ❤️ 点赞 {format_number(v['likes'])} &nbsp;|&nbsp; ⭐ 收藏 {format_number(v['collects'])}
+👤 **创作者**：{v['author']} &nbsp;|&nbsp; 📅 {v['pub_date']}
+❤️ 点赞 {format_number(v['likes'])} &nbsp;|&nbsp; ⭐ 收藏 {format_number(v['collects'])} (**{v['collect_rate']:.1f}%**) &nbsp;|&nbsp; 💬 评论 {format_number(v['comments'])}
 
-📌 **视频内容**：
-{ana.get('summary')}
+🎯 **爆款定位**：
+{ana.get('positioning')}
 
-💡 **值得借鉴的点**：
-{ana.get('takeaway')}
+⏱️ **黄金前 3 秒钩子**：
+{ana.get('hook')}
 
-🔥 **热门原因拆解**：
-{ana.get('viral_reason')}
+🎬 **四段式复刻脚本**：
+{ana.get('script_sop')}
 
-🚀 **如何借鉴复制**：
-{ana.get('replication')}
+💬 **评论区引流钩子**：
+{ana.get('cta_hook')}
 
 🔗 [点击在抖音打开观看原视频]({v['share_url']})
 
@@ -392,7 +528,7 @@ def send_mobile_notifications(videos, date_str):
             }
             res = requests.post(url, json=payload, timeout=12)
             if res.status_code == 200 and res.json().get("code") == 200:
-                print("[✔] 成功将 10 个黄金比例拆解视频推送到微信 (PushPlus)！")
+                print("[✔] 成功将 10 个创作者爆款拆解推送到微信 (PushPlus)！")
             else:
                 print(f"[-] PushPlus 推送返回: {res.text}")
         except Exception as e:
